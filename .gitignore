@@ -22,6 +22,12 @@ back/detector/cubicasa_model/weights/
 *.pkl
 *.pth
 
+# ── Vendored CubiCasa5K (CC BY-NC; clone locally, do not redistribute) ──
+back/detector/cubicasa_model/vendor/
+
+# ── Python venv ────────────────────────────────────────
+back/.venv/
+
 # ── Node / front ───────────────────────────────────────
 node_modules/
 
