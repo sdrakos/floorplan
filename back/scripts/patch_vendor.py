@@ -31,6 +31,22 @@ PATCHES = [
         "stats.mode(widths).mode[0]",
         "stats.mode(widths, keepdims=True).mode[0]",
     ),
+    # loaders/__init__ pulls dataset deps (lmdb, svgpathtools) we don't need for
+    # inference; make them optional so RotateNTurns (for TTA) imports cleanly.
+    (
+        os.path.join(VENDOR, "floortrans", "loaders", "__init__.py"),
+        "from floortrans.loaders.svg_loader import FloorplanSVG\n"
+        "from floortrans.loaders import svg_utils\n"
+        "from floortrans.loaders.augmentations import *\n"
+        "from floortrans.loaders import house",
+        "try:  # patched: dataset/svg deps optional for inference\n"
+        "    from floortrans.loaders.svg_loader import FloorplanSVG\n"
+        "    from floortrans.loaders import svg_utils\n"
+        "    from floortrans.loaders import house\n"
+        "except ImportError:\n"
+        "    pass\n"
+        "from floortrans.loaders.augmentations import *",
+    ),
 ]
 
 

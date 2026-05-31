@@ -8,6 +8,9 @@
 claude.db
 **/claude.db
 
+# ── Generated overlay renders ──────────────────────────
+*.overlay.png
+
 # ── Python ─────────────────────────────────────────────
 __pycache__/
 *.py[cod]

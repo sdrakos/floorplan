@@ -41,9 +41,11 @@ def _largest_polygon(geom):
 
 
 class CubiCasaDetector(RoomDetector):
-    def __init__(self, weights_path: str = _WEIGHTS):
+    def __init__(self, weights_path: str = _WEIGHTS, tta: bool = True):
         self._weights_path = weights_path
-        self._model = None  # lazy
+        self._tta = tta            # 4-rotation test-time augmentation (as in the reference notebook)
+        self._model = None         # lazy
+        self._rot = None
 
     @property
     def model_loaded(self) -> bool:
@@ -66,6 +68,7 @@ class CubiCasaDetector(RoomDetector):
         if _VENDOR not in sys.path:
             sys.path.insert(0, _VENDOR)
         from floortrans.models import get_model  # vendored
+        from floortrans.loaders import RotateNTurns  # vendored (TTA)
 
         model = get_model("hg_furukawa_original", 51)
         model.conv4_ = torch.nn.Conv2d(256, _N_CLASSES, bias=True, kernel_size=1)
@@ -73,6 +76,7 @@ class CubiCasaDetector(RoomDetector):
         model.load_state_dict(self._load_state())
         model.eval()
         self._model = model
+        self._rot = RotateNTurns()
 
     def detect(self, image: Image.Image) -> list[DetectedRoom]:
         self._ensure_model()
@@ -89,8 +93,21 @@ class CubiCasaDetector(RoomDetector):
         tensor = torch.tensor(arr) / 255.0 * 2 - 1.0
 
         with torch.no_grad():
-            pred = self._model(tensor)
-            pred = F.interpolate(pred, size=(ph, pw), mode="bilinear", align_corners=True)
+            if self._tta:
+                # Average over 4 rotations; 'points' fixes heatmap orientation channels.
+                rotations = [(0, 0), (1, -1), (2, 2), (-1, 1)]
+                acc = torch.zeros([len(rotations), _N_CLASSES, ph, pw])
+                for i, (fwd, back) in enumerate(rotations):
+                    rimg = self._rot(tensor, "tensor", fwd)
+                    p = self._model(rimg)
+                    p = self._rot(p, "tensor", back)
+                    p = self._rot(p, "points", back)
+                    p = F.interpolate(p, size=(ph, pw), mode="bilinear", align_corners=True)
+                    acc[i] = p[0]
+                pred = torch.mean(acc, 0, True)
+            else:
+                pred = self._model(tensor)
+                pred = F.interpolate(pred, size=(ph, pw), mode="bilinear", align_corners=True)
 
         heatmaps, rooms, icons = split_prediction(pred, (ph, pw), _SPLIT)
         _, _, room_polygons, room_types = get_polygons((heatmaps, rooms, icons), 0.2, [1, 2])
