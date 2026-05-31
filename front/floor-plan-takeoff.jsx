@@ -35,6 +35,7 @@ const fmt = (n) => new Intl.NumberFormat("el-GR", { minimumFractionDigits: 2, ma
 
 const STORAGE_KEY = "takeoff-projects-v1";
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const BACKEND_URL = "http://localhost:8000"; // local room-detection API (back/)
 
 export default function FloorPlanTakeoff() {
   // Projects
@@ -74,6 +75,7 @@ export default function FloorPlanTakeoff() {
 
   // AI Detection
   const [detecting, setDetecting] = useState(false);
+  const [engine, setEngine] = useState("classical"); // backend engine: classical | cubicasa
 
   // Custom Layers
   const [customLayers, setCustomLayers] = useState([]);
@@ -345,6 +347,44 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
       setAiStatus("✗ " + String(err).slice(0, 200));
     }
 
+    setDetecting(false);
+    setTimeout(() => setAiStatus(""), 12000);
+  };
+
+  // ── Backend Auto-Detect (local back/ API: classical CV or CubiCasa) ──
+  const autoDetectBackend = async () => {
+    if (!image) { setAiStatus("✗ Φόρτωσε πρώτα εικόνα"); return; }
+    setDetecting(true);
+    setAiStatus("Αποστολή στο backend (" + engine + ")...");
+    try {
+      const blob = await (await fetch(image)).blob();
+      const fd = new FormData();
+      fd.append("file", blob, "plan.png");
+      fd.append("engine", engine);
+      if (calibrated && pixelsPerMeter) fd.append("pixels_per_meter", String(pixelsPerMeter));
+
+      const res = await fetch(BACKEND_URL + "/detect", { method: "POST", body: fd });
+      if (!res.ok) { setAiStatus("✗ Backend HTTP " + res.status); setDetecting(false); return; }
+      const data = await res.json();
+      const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+
+      const newShapes = rooms
+        .filter(r => r?.points?.length >= 3)
+        .map(r => ({
+          id: uid(), type: "polygon",
+          layer: LAYER_TYPES.find(l => l.id === r.type) ? r.type : "room_internal",
+          points: r.points.map(p => ({ x: Math.round(Number(p.x)), y: Math.round(Number(p.y)) })),
+          label: r.label || "Χώρος",
+        }));
+
+      if (newShapes.length === 0) { setAiStatus("✗ 0 δωμάτια από backend"); setDetecting(false); return; }
+      pushUndo();
+      setShapes(prev => [...prev, ...newShapes]);
+      setTool("select");
+      setAiStatus("✓ " + newShapes.length + " δωμάτια (" + engine + "). Διόρθωσε κορυφές/layers.");
+    } catch (err) {
+      setAiStatus("✗ Backend error — τρέχει ο server; (" + String(err).slice(0, 90) + ")");
+    }
     setDetecting(false);
     setTimeout(() => setAiStatus(""), 12000);
   };
@@ -1001,6 +1041,26 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
                   <p style={{ fontSize: 11, color: "#8B7355", margin: "0 0 8px" }}>Κάνε κλικ σε 2 σημεία πάνω σε γνωστή διάσταση</p>
                   <input style={S.input} type="number" step="0.01" placeholder="Μέτρα (π.χ. 4.20)" value={calMeters} onChange={(e) => setCalMeters(e.target.value)} />
                   <button style={S.primaryBtn} onClick={doCalibrate} disabled={!calLine || !calMeters}>✓ Εφαρμογή Scale</button>
+                </div>
+              )}
+
+              {/* Backend Detection (local back/ API) */}
+              {image && (
+                <div style={S.toolSection}>
+                  <p style={S.toolLabel}>🖥️ Backend Αναγνώριση (local)</p>
+                  <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                    <button style={{ ...S.layerBtn, flex: 1, justifyContent: "center", fontWeight: engine === "classical" ? 700 : 400, background: engine === "classical" ? "#16A08518" : undefined }} onClick={() => setEngine("classical")}>Classical CV</button>
+                    <button style={{ ...S.layerBtn, flex: 1, justifyContent: "center", fontWeight: engine === "cubicasa" ? 700 : 400, background: engine === "cubicasa" ? "#2E86AB18" : undefined }} onClick={() => setEngine("cubicasa")}>CubiCasa</button>
+                  </div>
+                  <button style={{ ...S.primaryBtn, background: detecting ? "#aaa" : "#16A085", opacity: detecting ? 0.7 : 1 }} onClick={autoDetectBackend} disabled={detecting}>
+                    {detecting ? "⏳ Αναγνώριση..." : "🔍 Αναγνώριση από Backend"}
+                  </button>
+                  <p style={{ fontSize: 9, color: "#8B7355", margin: "4px 0 0", lineHeight: 1.3 }}>
+                    Πρόχειρο — διόρθωσε χειροκίνητα.{!calibrated && " Κάνε calibration για m²."}
+                  </p>
+                  {aiStatus && (
+                    <p style={{ fontSize: 10, color: aiStatus.startsWith("✓") ? "#27ae60" : aiStatus.startsWith("✗") ? "#c0392b" : "#8B7355", margin: "6px 0 0", lineHeight: 1.4, fontWeight: 600 }}>{aiStatus}</p>
+                  )}
                 </div>
               )}
 

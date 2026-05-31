@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from PIL import Image, UnidentifiedImageError
 
-from ..dependencies import get_detector
+from ..dependencies import get_detector, get_detector_for
 from ..detector.base import RoomDetector
 from ..geometry import polygon_area_px2, px2_to_m2, simplify_polygon
 from ..overlay import render_overlay
@@ -32,8 +32,11 @@ def health(detector: RoomDetector = Depends(get_detector)) -> HealthResponse:
 async def detect(
     file: UploadFile = File(...),
     pixels_per_meter: float | None = Form(default=None),
+    engine: str | None = Form(default=None),
     detector: RoomDetector = Depends(get_detector),
 ) -> DetectResponse:
+    if engine:
+        detector = get_detector_for(engine)
     image = _read_image(await file.read())
     detected = detector.detect(image)
     rooms: list[Room] = []
@@ -57,9 +60,12 @@ async def detect(
 async def detect_overlay(
     file: UploadFile = File(...),
     pixels_per_meter: float | None = Form(default=None),
+    engine: str | None = Form(default=None),
     detector: RoomDetector = Depends(get_detector),
 ) -> StreamingResponse:
     """Return the floor plan with detected rooms drawn on top (PNG)."""
+    if engine:
+        detector = get_detector_for(engine)
     image = _read_image(await file.read())
     rooms = detector.detect(image)
     rendered = render_overlay(image, rooms, pixels_per_meter)
