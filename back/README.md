@@ -14,18 +14,17 @@ The service works in **pixels**. Real-world area (m²) is computed only when the
 `pixels_per_meter` — that scale comes from the front-end's manual calibration
 (`front/floor-plan-takeoff.jsx`, draw a line over a known dimension). Without it, only `areaPx2` is returned.
 
-## Setup (Windows, Python 3.13)
+## Setup (Windows, Python 3.13 — global environment, no venv)
 
 ```bat
-python -m venv back\.venv
-back\.venv\Scripts\pip install -r back\requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+pip install -r back\requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
 REM Vendor the model code (CC BY-NC; not redistributed in this repo) + apply compat patches
 git clone --depth 1 https://github.com/EmanuelKuhn/CubiCasa5k back\detector\cubicasa_model\vendor
-back\.venv\Scripts\python back\scripts\patch_vendor.py
+python back\scripts\patch_vendor.py
 
 REM Download trained weights (Google Drive) and sanitize to a pure state_dict
-back\.venv\Scripts\python back\scripts\download_weights.py
+python back\scripts\download_weights.py
 ```
 
 `patch_vendor.py` is idempotent and adapts the 2019-era code to the modern stack
@@ -34,7 +33,8 @@ back\.venv\Scripts\python back\scripts\download_weights.py
 ## Run
 
 ```bat
-back\.venv\Scripts\uvicorn back.app:app --port 8000
+python back\app.py
+REM or: uvicorn back.app:app --port 8000
 ```
 
 - `GET /health` → `{"status":"ok","model_loaded":bool}`
@@ -47,9 +47,9 @@ back\.venv\Scripts\uvicorn back.app:app --port 8000
 ## Test
 
 ```bat
-back\.venv\Scripts\python -m pytest back\tests -v
-back\.venv\Scripts\python back\scripts\run_on_samples.py                 REM px² only
-back\.venv\Scripts\python back\scripts\run_on_samples.py --ppm 2bed=80   REM with a scale → m²
+python -m pytest back\tests -v
+python back\scripts\run_on_samples.py                 REM px² only
+python back\scripts\run_on_samples.py --ppm 2bed=80   REM with a scale -> m²
 ```
 
 Integration tests run on the two bundled plans and auto-skip if weights are absent.

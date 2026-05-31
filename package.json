@@ -1,0 +1,8 @@
+{
+  "name": "floorplan-db-tooling",
+  "private": true,
+  "description": "Supabase CLI tooling for the FloorPlan local DB (run via npx supabase ...)",
+  "devDependencies": {
+    "supabase": "^2"
+  }
+}
