@@ -15,25 +15,34 @@ sys.path.insert(0, ROOT)
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 from PIL import Image
-from back.detector.cubicasa import CubiCasaDetector
 from back.overlay import render_overlay
 
 DEFAULT_SAMPLES = ["2-Bedroom-Home-Plan-With-Dimensions.png", "φλοορ2.jpg"]
 
 
+def make_detector(engine: str):
+    if engine == "classical":
+        from back.detector.classical import ClassicalDetector
+        return ClassicalDetector()
+    from back.detector.cubicasa import CubiCasaDetector
+    return CubiCasaDetector()
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--engine", choices=["cubicasa", "classical"], default="cubicasa")
     ap.add_argument("--ppm", type=float, default=None, help="pixels per meter (for m²)")
+    ap.add_argument("--suffix", default="overlay", help="output suffix")
     ap.add_argument("images", nargs="*", help="image paths (default: the two samples)")
     args = ap.parse_args()
 
     images = args.images or [os.path.join(ROOT, s) for s in DEFAULT_SAMPLES]
-    det = CubiCasaDetector()
+    det = make_detector(args.engine)
     for path in images:
         img = Image.open(path)
         rooms = det.detect(img)
         out = render_overlay(img, rooms, args.ppm)
-        dst = os.path.splitext(path)[0] + ".overlay.png"
+        dst = os.path.splitext(path)[0] + f".{args.suffix}.png"
         out.save(dst)
         print(f"{os.path.basename(path)}: {len(rooms)} rooms -> {dst}")
 
