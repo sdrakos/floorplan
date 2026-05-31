@@ -4,6 +4,10 @@
 *.env
 !*.env.example
 
+# ── Conversation logs (private; public repo) ───────────
+claude.db
+**/claude.db
+
 # ── Python ─────────────────────────────────────────────
 __pycache__/
 *.py[cod]

@@ -75,3 +75,32 @@ shape (and CSV import in v3). Keep the item shape stable across both sides when 
   `AGENTI_SDK/`, whose `CLAUDE.md` describes the unrelated AgelClaw project). Scope work here to `FLOORPLAN/`.
 - When editing a component, preserve its self-contained nature: single default export, no new external
   dependencies, no cross-file imports.
+
+## Conversation Logging (standing instruction)
+
+Record every conversation, and **update the record at each checkpoint** (after each meaningful step),
+to **two mirrored destinations**:
+
+1. **Local SQLite** — `back/claude.db`, via `back/conversation_log.py`:
+   ```
+   python back/conversation_log.py upsert --session <stable-id> --title "..." --summary "..." \
+       --key-decisions "..." --action-items "..." --status "In Progress" \
+       --type Development --project Construction --device "🖥️ Desktop Σπίτι" \
+       --notion-url "<url from step 2>"
+   ```
+2. **Notion** — the "📝 Claude Conversations" database (data source
+   `cd521f39-b784-426d-8a73-2a7f35391d65`) via the Notion MCP. Create the page once per conversation,
+   then `update-page` it on later checkpoints.
+
+Rules:
+- **One row per conversation** (keyed by `--session`), updated in place — never a new row per checkpoint.
+- Keep both mirrors in sync: store the Notion page URL back into `claude.db` with `--notion-url`.
+- Schema fields match the Notion DB: Title, Summary, Action Items, Key Decisions, Status
+  (`Completed`/`In Progress`/`Follow Up Needed`/`Reference`), Project (multi), Type, Device/Source, Date.
+- `claude.db` is **gitignored** — these logs must never reach the public repo.
+
+## Commits
+
+- This repo's remote is **public** (`github.com/sdrakos/floorplan`).
+- **Author/sign commits as `sdrakos`. Never add a `Co-Authored-By` line.**
+- Never commit `.env`, `.Claude/`, model weights, or `claude.db` (all gitignored — keep it that way).
