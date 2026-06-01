@@ -425,11 +425,89 @@ function ListV({offers,templates,onCreate,onSelect,onDup,onDel,onPreview,oT,onCo
 /* ═══════════════════════════════════════════════════════════
    EDITOR VIEW
    ═══════════════════════════════════════════════════════════ */
+const KIND_LABEL = { work: "Εργασία", material: "Υλικό", combo: "Υλικό+Εργασία" };
+
+function CatalogPicker({ onClose, onAdd, single, onPick }) {
+  const [items, setItems] = useState([]);
+  const [cats, setCats] = useState([]);
+  const [cat, setCat] = useState("");
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [r1, r2] = await Promise.all([fetch(API_URL + "/catalog"), fetch(API_URL + "/catalog/categories")]);
+        if (!r1.ok) throw new Error();
+        setItems(await r1.json());
+        setCats(r2.ok ? await r2.json() : []);
+      } catch { setErr("Δεν φορτώθηκε ο κατάλογος — τρέχει ο server (python back/app.py);"); }
+      setLoading(false);
+    })();
+  }, []);
+
+  const shown = items.filter(it =>
+    (!cat || it.category === cat) &&
+    (!q || (it.description || "").toLowerCase().includes(q.toLowerCase())));
+  const key = it => it.id || it.code;
+  const toggle = it => setSel(s => { const n = { ...s }; if (n[key(it)]) delete n[key(it)]; else n[key(it)] = it; return n; });
+  const chosen = Object.values(sel);
+  const add = () => { if (chosen.length) onAdd(chosen.map(it => ({ description: it.description, quantity: 0, unit: it.unit, unitPrice: Number(it.unit_price) || 0, notes: "" }))); };
+
+  const ov = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 };
+  const box = { background: "#fff", borderRadius: 14, width: "min(820px,96vw)", maxHeight: "86vh", display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "'DM Sans',sans-serif" };
+  return (
+    <div style={ov} onClick={onClose}>
+      <div style={box} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: "16px 20px", background: "#3a3028", color: "#f5f0e8", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <strong style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20 }}>📚 Κατάλογος Εργασιών & Υλικών</strong>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#f5f0e8", fontSize: 22, cursor: "pointer" }}>×</button>
+        </div>
+        <div style={{ padding: "12px 20px", display: "flex", gap: 10, borderBottom: "1px solid #eee" }}>
+          <input placeholder="🔍 Αναζήτηση…" value={q} onChange={e => setQ(e.target.value)}
+            style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #ddd" }} />
+          <select value={cat} onChange={e => setCat(e.target.value)} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #ddd" }}>
+            <option value="">Όλες οι κατηγορίες</option>
+            {cats.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div style={{ overflowY: "auto", padding: "4px 0", flex: 1 }}>
+          {loading && <p style={{ padding: 20, color: "#8B7355" }}>Φόρτωση…</p>}
+          {err && <p style={{ padding: 20, color: "#c0392b" }}>{err}</p>}
+          {!loading && !err && shown.map(it => (
+            <label key={key(it)} onClick={single ? () => onPick(it) : undefined}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 20px", borderBottom: "1px solid #f3efe8", cursor: "pointer", background: sel[key(it)] ? "rgba(22,160,133,0.07)" : "transparent" }}>
+              {!single && <input type="checkbox" checked={!!sel[key(it)]} onChange={() => toggle(it)} />}
+              <span style={{ flex: 1, fontSize: 13 }}>{it.description}
+                <span style={{ color: "#9a8c7a", fontSize: 11 }}> · {it.category}</span></span>
+              <span style={{ fontSize: 10, color: "#0e7c66", background: "#16A08515", padding: "2px 8px", borderRadius: 10 }}>{KIND_LABEL[it.kind] || it.kind}</span>
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#3a3028", minWidth: 90, textAlign: "right" }}>{fmt(Number(it.unit_price) || 0)}/{it.unit}</span>
+            </label>
+          ))}
+          {!loading && !err && shown.length === 0 && <p style={{ padding: 20, color: "#8B7355" }}>Κανένα είδος.</p>}
+        </div>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "#8B7355" }}>
+            {shown.length} είδη{single ? " · κλικ για επιλογή" : ` · ${chosen.length} επιλεγμένα`}
+          </span>
+          {!single && <button disabled={!chosen.length} onClick={add}
+            style={{ padding: "10px 20px", borderRadius: 8, border: "none", cursor: chosen.length ? "pointer" : "not-allowed", fontWeight: 700, background: chosen.length ? "#16A085" : "#bbb", color: "#fff" }}>
+            ➕ Προσθήκη {chosen.length || ""} ειδών
+          </button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EditV({offer,uF,addSec,uSec,dSec,addIt,uIt,dIt,sT,oT,onPrev,onTmpl,onCsvImport}){
   const surcharge = offer.islandSurcharge ? 1.15 : 1;
   const adjTotal = oT(offer) * surcharge;
   const perUnit = offer.numUnits > 0 ? adjTotal / offer.numUnits : adjTotal;
   const csvRef = useRef();
+  const [showCat, setShowCat] = useState(false);
 
   const handleCsv = (e) => {
     const file = e.target.files[0];
@@ -515,8 +593,10 @@ function EditV({offer,uF,addSec,uSec,dSec,addIt,uIt,dIt,sT,oT,onPrev,onTmpl,onCs
         <button style={B.sec2} onClick={onPrev}>👁 Προεπισκόπηση</button>
         <button style={B.sec2} onClick={onTmpl}>💾 Ως Template</button>
         <button style={B.sec2} onClick={()=>csvRef.current?.click()}>📥 Import CSV</button>
+        <button style={{...B.sec2,borderColor:"#16A085",color:"#0e7c66"}} onClick={()=>setShowCat(true)}>📚 Από Κατάλογο</button>
         <input ref={csvRef} type="file" accept=".csv,.tsv,.txt" style={{display:"none"}} onChange={handleCsv}/>
       </div>
+      {showCat&&<CatalogPicker onClose={()=>setShowCat(false)} onAdd={(items)=>{onCsvImport(items,"Από Κατάλογο");setShowCat(false);}}/>}
     </div>
 
     {/* Grand Total + Per Unit + Surcharge */}
@@ -556,6 +636,7 @@ function Fd({l,v,c,t="text",ph=""}){
 
 function SecBlock({s,i,u,rm,aI,uI,dI,t}){
   const[en,setEn]=useState(false);
+  const[pickId,setPickId]=useState(null);
   const r=useRef();
   useEffect(()=>{if(en&&r.current)r.current.focus();},[en]);
 
@@ -584,7 +665,10 @@ function SecBlock({s,i,u,rm,aI,uI,dI,t}){
         <tbody>
           {s.items.map((it,ii)=><tr key={it.id} style={{borderBottom:"1px solid #f8f4ee"}}>
             <td style={B.td}><span style={{display:"inline-flex",width:20,height:20,alignItems:"center",justifyContent:"center",borderRadius:5,background:"#f5f0e8",fontSize:10,fontWeight:700,color:"#8B7355"}}>{ii+1}</span></td>
-            <td style={B.td}><input style={B.ci} value={it.description} onChange={e=>uI(it.id,{description:e.target.value})} placeholder="Περιγραφή..."/></td>
+            <td style={B.td}><div style={{display:"flex",gap:4,alignItems:"center"}}>
+              <input style={B.ci} value={it.description} onChange={e=>uI(it.id,{description:e.target.value})} placeholder="Περιγραφή..."/>
+              <button title="Επιλογή από κατάλογο" style={{...B.ib,color:"#0e7c66",flexShrink:0}} onClick={()=>setPickId(it.id)}>📚</button>
+            </div></td>
             <td style={B.td}><input style={{...B.ci,textAlign:"right"}} type="number" min={0} step="any" value={it.quantity||""} onChange={e=>uI(it.id,{quantity:parseFloat(e.target.value)||0})}/></td>
             <td style={B.td}><select style={B.cs} value={it.unit} onChange={e=>uI(it.id,{unit:e.target.value})}>{UNITS.map(u=><option key={u}>{u}</option>)}</select></td>
             <td style={B.td}><input style={{...B.ci,textAlign:"right"}} type="number" min={0} step="any" value={it.unitPrice||""} onChange={e=>uI(it.id,{unitPrice:parseFloat(e.target.value)||0})}/></td>
@@ -602,6 +686,7 @@ function SecBlock({s,i,u,rm,aI,uI,dI,t}){
       </table>
       <button style={{display:"inline-flex",alignItems:"center",gap:5,background:"none",border:"1px dashed #ccc3b4",color:"#8B7355",padding:"6px 14px",margin:"6px 18px",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}} onClick={aI}>+ Εγγραφή</button>
     </div>}
+    {pickId&&<CatalogPicker single onClose={()=>setPickId(null)} onPick={(item)=>{uI(pickId,{description:item.description,unit:item.unit,unitPrice:Number(item.unit_price)||0});setPickId(null);}}/>}
   </div>
   );
 }
