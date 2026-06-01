@@ -116,3 +116,76 @@ def replace_shapes(project_id: str, shapes: list[dict], tenant_id: str = DEFAULT
         "area_px2": s.get("area_px2"), "area_m2": s.get("area_m2"),
     } for s in shapes]
     return client.table("shapes").insert(rows).execute().data
+
+
+# ── offers / sections / items (τεύχη) ─────────────────────────────────────────
+
+def list_offers(tenant_id: str = DEFAULT_TENANT_ID) -> list[dict]:
+    return (get_client().table("offers").select("*")
+            .eq("tenant_id", tenant_id).order("updated_at", desc=True).execute().data)
+
+
+def create_offer(name: str, client: str | None = None, project_name: str | None = None,
+                 offer_date: str | None = None, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    row = {"tenant_id": tenant_id, "name": name, "client": client,
+           "project_name": project_name, "offer_date": offer_date}
+    return get_client().table("offers").insert(row).execute().data[0]
+
+
+def get_offer(offer_id: str) -> dict | None:
+    c = get_client()
+    rows = c.table("offers").select("*").eq("id", offer_id).execute().data
+    if not rows:
+        return None
+    offer = rows[0]
+    sections = (c.table("offer_sections").select("*")
+                .eq("offer_id", offer_id).order("position").execute().data)
+    sids = [s["id"] for s in sections]
+    items = []
+    if sids:
+        items = (c.table("offer_items").select("*")
+                 .in_("section_id", sids).order("position").execute().data)
+    by_section: dict[str, list] = {}
+    for it in items:
+        by_section.setdefault(it["section_id"], []).append(it)
+    for s in sections:
+        s["items"] = by_section.get(s["id"], [])
+    offer["sections"] = sections
+    return offer
+
+
+def update_offer(offer_id: str, fields: dict) -> dict | None:
+    allowed = {k: v for k, v in fields.items()
+               if k in ("name", "client", "project_name", "offer_date")}
+    if not allowed:
+        return get_offer(offer_id)
+    rows = get_client().table("offers").update(allowed).eq("id", offer_id).execute().data
+    return rows[0] if rows else None
+
+
+def delete_offer(offer_id: str) -> None:
+    get_client().table("offers").delete().eq("id", offer_id).execute()
+
+
+def replace_offer_content(offer_id: str, sections: list[dict],
+                          tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    """Bulk replace all sections + items of an offer (front save-everything model)."""
+    c = get_client()
+    c.table("offer_sections").delete().eq("offer_id", offer_id).execute()  # cascades items
+    n_sections = n_items = 0
+    for si, sec in enumerate(sections):
+        srow = c.table("offer_sections").insert({
+            "tenant_id": tenant_id, "offer_id": offer_id,
+            "name": sec.get("name", ""), "note": sec.get("note"), "position": si,
+        }).execute().data[0]
+        n_sections += 1
+        items = sec.get("items", [])
+        if items:
+            c.table("offer_items").insert([{
+                "tenant_id": tenant_id, "section_id": srow["id"],
+                "description": it.get("description", ""), "quantity": it.get("quantity", 0),
+                "unit": it.get("unit", "pcs"), "unit_price": it.get("unit_price", 0),
+                "position": ii,
+            } for ii, it in enumerate(items)]).execute()
+            n_items += len(items)
+    return {"offer_id": offer_id, "sections": n_sections, "items": n_items}

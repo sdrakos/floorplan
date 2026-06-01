@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 const STORAGE_KEY = "teuchos-v3";
+const API_URL = "http://localhost:8000"; // local back/ API (Supabase-backed)
+const JSON_H = { "Content-Type": "application/json" };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 /* ═══════════════════════════════════════════════════════════
@@ -227,6 +229,9 @@ export default function App(){
   const[preview,setPreview]=useState(null);
   const[compareIds,setCompareIds]=useState([]);
   const sRef=useRef(null);
+  const[cloud,setCloud]=useState("");      // Supabase sync indicator
+  const cloudIdRef=useRef({});             // local offer id -> Supabase offer id
+  const cloudRef=useRef(null);
 
   useEffect(()=>{(async()=>{try{const r=await window.storage.get(STORAGE_KEY);if(r?.value)setData(JSON.parse(r.value));}catch{}setLoading(false);})();},[]);
 
@@ -252,6 +257,48 @@ export default function App(){
   const sT=s=>s.items.reduce((a,i)=>a+(i.quantity||0)*(i.unitPrice||0),0);
   const oT=o=>(o?.sections||[]).reduce((a,s)=>a+sT(s),0);
   const allT=[...TEMPLATES,...(data.custom||[])];
+
+  // ── Cloud sync (Supabase via back/ API) — best-effort, offline-safe ──
+  const cloudPush=async()=>{
+    if(!aid) return;
+    const o=data.offers.find(x=>x.id===aid);
+    if(!o) return;
+    const content={sections:(o.sections||[]).map(s=>({name:s.name,note:s.note||null,
+      items:(s.items||[]).map(i=>({description:i.description||"",quantity:i.quantity||0,unit:i.unit||"pcs",unit_price:i.unitPrice||0}))}))};
+    const meta={name:o.name,client:o.client||null,project_name:o.project||null,offer_date:o.date||null};
+    try{
+      let cid=cloudIdRef.current[o.id];
+      if(!cid){const r=await fetch(API_URL+"/offers",{method:"POST",headers:JSON_H,body:JSON.stringify(meta)});if(!r.ok)throw 0;cid=(await r.json()).id;cloudIdRef.current[o.id]=cid;}
+      else{await fetch(API_URL+"/offers/"+cid,{method:"PUT",headers:JSON_H,body:JSON.stringify(meta)});}
+      await fetch(API_URL+"/offers/"+cid+"/content",{method:"PUT",headers:JSON_H,body:JSON.stringify(content)});
+      setCloud("☁️ συγχρονίστηκε");
+    }catch{setCloud("☁️ offline");}
+    setTimeout(()=>setCloud(""),3000);
+  };
+  const cloudLoad=async()=>{
+    try{
+      const r=await fetch(API_URL+"/offers");if(!r.ok)throw 0;
+      const list=await r.json();
+      const known=new Set(Object.values(cloudIdRef.current));
+      const imported=[];
+      for(const c of list){
+        if(known.has(c.id))continue;
+        const fr=await fetch(API_URL+"/offers/"+c.id);if(!fr.ok)continue;
+        const full=await fr.json();
+        const lid=uid();cloudIdRef.current[lid]=c.id;
+        imported.push({id:lid,name:(full.name||"Offer")+" (cloud)",client:full.client||"",project:full.project_name||"",date:full.offer_date||"",
+          sections:(full.sections||[]).map(s=>({id:uid(),name:s.name,collapsed:false,note:s.note||"",
+            items:(s.items||[]).map(i=>({id:uid(),description:i.description,quantity:Number(i.quantity)||0,unit:i.unit||"pcs",unitPrice:Number(i.unit_price)||0,notes:""}))})),
+          createdAt:Date.now(),updatedAt:Date.now()});
+      }
+      if(imported.length)up(d=>({...d,offers:[...d.offers,...imported]}));
+      setCloud("☁️ "+imported.length+" από cloud");
+    }catch{setCloud("☁️ offline");}
+    setTimeout(()=>setCloud(""),3000);
+  };
+  useEffect(()=>{if(loading||!aid)return;if(cloudRef.current)clearTimeout(cloudRef.current);cloudRef.current=setTimeout(()=>cloudPush(),1500);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[data,aid]);
 
   if(loading) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"#f5f0e8",fontFamily:"'Cormorant Garamond',serif"}}>
@@ -282,6 +329,8 @@ export default function App(){
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           {saving&&<span style={{fontSize:10,background:"rgba(255,255,255,0.1)",padding:"4px 12px",borderRadius:20,color:"#a09080"}}>Saving...</span>}
+          {cloud&&<span style={{fontSize:10,padding:"4px 12px",borderRadius:20,color:"#7fd8c0"}}>{cloud}</span>}
+          <button style={B.back} onClick={cloudLoad}>☁️ Cloud</button>
           {view!=="list"&&<button style={B.back} onClick={()=>{setView("list");setPreview(null);}}>← Λίστα</button>}
         </div>
       </header>

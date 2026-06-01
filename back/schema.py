@@ -58,3 +58,36 @@ class ShapeIn(BaseModel):
 
 class ShapesReplace(BaseModel):
     shapes: list[ShapeIn]
+
+
+# ── offers / τεύχη ────────────────────────────────────────────────────────────
+
+class OfferIn(BaseModel):
+    name: str
+    client: str | None = None
+    project_name: str | None = None
+    offer_date: str | None = None   # ISO date
+
+
+class OfferPatch(BaseModel):
+    name: str | None = None
+    client: str | None = None
+    project_name: str | None = None
+    offer_date: str | None = None
+
+
+class OfferItemIn(BaseModel):
+    description: str = ""
+    quantity: float = 0
+    unit: str = "pcs"
+    unit_price: float = 0
+
+
+class OfferSectionIn(BaseModel):
+    name: str = ""
+    note: str | None = None
+    items: list[OfferItemIn] = Field(default_factory=list)
+
+
+class OfferContentReplace(BaseModel):
+    sections: list[OfferSectionIn]
