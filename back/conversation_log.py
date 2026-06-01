@@ -122,6 +122,35 @@ def cmd_upsert(args):
                        (args.session,)).fetchone()
     conn.close()
     print(f"✓ {action} chat_id={out['chat_id']} session={out['session']}")
+    _mirror_supabase(args, project)
+
+
+def _mirror_supabase(args, project_json):
+    """Best-effort mirror to the Supabase `conversations` table (alongside
+    SQLite + Notion). Disabled with FLOORPLAN_DB_LOG=0; never breaks local logging."""
+    if os.environ.get("FLOORPLAN_DB_LOG", "1") == "0":
+        return
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import db
+        fields = {}
+        for k, v in (("title", args.title), ("summary", args.summary),
+                     ("action_items", args.action_items), ("key_decisions", args.key_decisions),
+                     ("status", args.status), ("type", args.type),
+                     ("device_source", args.device), ("notion_url", args.notion_url)):
+            if v is not None:
+                fields[k] = v
+        if project_json:
+            try:
+                fields["projects"] = json.loads(project_json)
+            except Exception:
+                pass
+        if args.date:
+            fields["conv_date"] = args.date[:10]
+        db.upsert_conversation(args.session, **fields)
+        print("  ↳ mirrored to Supabase conversations")
+    except Exception:
+        pass  # offline / DB down — SQLite + Notion still recorded
 
 
 def cmd_get(args):
