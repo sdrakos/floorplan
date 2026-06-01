@@ -301,6 +301,16 @@ export default function App(){
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[data,aid]);
 
+  // Explicit immediate save (local + cloud) — beyond the debounced auto-save.
+  const saveNow=async()=>{
+    if(sRef.current)clearTimeout(sRef.current);
+    setSaving(true);
+    try{await window.storage.set(STORAGE_KEY,JSON.stringify(data));}catch{}
+    await cloudPush();
+    setSaving(false);
+    flash("✓ Αποθηκεύτηκε");
+  };
+
   if(loading) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"#f5f0e8",fontFamily:"'Cormorant Garamond',serif"}}>
       <p style={{color:"#8B7355",fontSize:18}}>Φόρτωση...</p>
@@ -331,6 +341,7 @@ export default function App(){
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           {saving&&<span style={{fontSize:10,background:"rgba(255,255,255,0.1)",padding:"4px 12px",borderRadius:20,color:"#a09080"}}>Saving...</span>}
           {cloud&&<span style={{fontSize:10,padding:"4px 12px",borderRadius:20,color:"#7fd8c0"}}>{cloud}</span>}
+          {aid&&<button style={{padding:"7px 16px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:"#16A085",color:"#fff"}} onClick={saveNow}>💾 Αποθήκευση</button>}
           <button style={B.back} onClick={cloudLoad}>☁️ Cloud</button>
           {aid&&<button style={B.back} onClick={()=>{const cid=cloudIdRef.current[aid];if(cid){window.open(API_URL+"/offers/"+cid+"/pdf","_blank");}else{setCloud("Συγχρονίζεται… ξαναδοκίμασε");setTimeout(()=>setCloud(""),3000);}}}>⬇️ PDF</button>}
           {view!=="list"&&<button style={B.back} onClick={()=>{setView("list");setPreview(null);}}>← Λίστα</button>}
