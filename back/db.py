@@ -228,6 +228,28 @@ def catalog_categories(tenant_id: str = DEFAULT_TENANT_ID) -> list[str]:
     return sorted({r["category"] for r in rows})
 
 
+def create_catalog_item(category: str, description: str, unit: str = "τεμ",
+                        unit_price: float = 0, kind: str = "combo", code: str | None = None,
+                        tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    row = {"tenant_id": tenant_id, "category": category, "description": description,
+           "unit": unit, "unit_price": unit_price, "kind": kind, "code": code}
+    return get_client().table("catalog_items").insert(row).execute().data[0]
+
+
+def update_catalog_item(item_id: str, fields: dict) -> dict | None:
+    allowed = {k: v for k, v in fields.items()
+               if k in ("category", "description", "unit", "unit_price", "kind", "code")}
+    if not allowed:
+        rows = get_client().table("catalog_items").select("*").eq("id", item_id).execute().data
+        return rows[0] if rows else None
+    rows = get_client().table("catalog_items").update(allowed).eq("id", item_id).execute().data
+    return rows[0] if rows else None
+
+
+def delete_catalog_item(item_id: str) -> None:
+    get_client().table("catalog_items").delete().eq("id", item_id).execute()
+
+
 def reseed_global_catalog(rows: list[dict]) -> int:
     """Replace the global catalog (tenant_id IS NULL) with `rows`. Idempotent."""
     c = get_client()

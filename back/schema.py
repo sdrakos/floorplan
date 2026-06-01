@@ -99,6 +99,26 @@ class OfferContentReplace(BaseModel):
     sections: list[OfferSectionIn]
 
 
+# ── catalog ───────────────────────────────────────────────────────────────────
+
+class CatalogItemIn(BaseModel):
+    category: str
+    description: str
+    unit: str = "τεμ"
+    unit_price: float = 0
+    kind: str = "combo"            # work | material | combo
+    code: str | None = None
+
+
+class CatalogItemPatch(BaseModel):
+    category: str | None = None
+    description: str | None = None
+    unit: str | None = None
+    unit_price: float | None = None
+    kind: str | None = None
+    code: str | None = None
+
+
 class OfferFromProject(BaseModel):
     name: str = "Προσφορά"
     project_id: str | None = None
