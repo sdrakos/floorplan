@@ -79,6 +79,7 @@ export default function FloorPlanTakeoff() {
   const [cloudStatus, setCloudStatus] = useState(""); // Supabase sync indicator
   const cloudIdRef = useRef({});      // local project id -> Supabase project id
   const cloudTimerRef = useRef(null);
+  const imageUploadedRef = useRef({}); // cloud project id -> last uploaded image dataURL
 
   // Custom Layers
   const [customLayers, setCustomLayers] = useState([]);
@@ -162,6 +163,16 @@ export default function FloorPlanTakeoff() {
     setPan({ x: 0, y: 0 });
     setShowExport(false);
     setView("canvas");
+    // Cloud project without a local image → fetch a signed URL from Supabase Storage.
+    if (!proj.image) {
+      const cid = cloudIdRef.current[proj.id];
+      if (cid) {
+        fetch(BACKEND_URL + "/projects/" + cid + "/image-url")
+          .then((r) => (r.ok ? r.json() : null))
+          .then((j) => { if (j?.url) setImage(j.url); })
+          .catch(() => {});
+      }
+    }
   };
 
   // ── Create new project ──
@@ -677,6 +688,16 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ shapes: buildShapesPayload() }),
       });
+      // Upload the floor-plan image to Supabase Storage (once per change).
+      if (image && image.startsWith("data:") && imageUploadedRef.current[cloudId] !== image) {
+        try {
+          const blob = await (await fetch(image)).blob();
+          const fd = new FormData();
+          fd.append("file", blob, "plan.png");
+          await fetch(BACKEND_URL + "/projects/" + cloudId + "/image", { method: "POST", body: fd });
+          imageUploadedRef.current[cloudId] = image;
+        } catch {}
+      }
       setCloudStatus("☁️ συγχρονίστηκε");
     } catch {
       setCloudStatus("☁️ offline");

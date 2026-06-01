@@ -4,7 +4,7 @@ Server-side uses the service_role key (RLS bypassed in dev). Replaces the
 front-end's window.storage persistence.
 """
 from __future__ import annotations
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from .. import db
 from ..schema import ProjectIn, ProjectPatch, ShapesReplace
@@ -49,3 +49,20 @@ def replace_shapes(project_id: str, body: ShapesReplace) -> dict:
         raise HTTPException(status_code=404, detail="Project not found")
     rows = db.replace_shapes(project_id, [s.model_dump() for s in body.shapes])
     return {"project_id": project_id, "count": len(rows)}
+
+
+@router.post("/{project_id}/image")
+async def upload_image(project_id: str, file: UploadFile = File(...)) -> dict:
+    if db.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    data = await file.read()
+    path = db.upload_project_image(project_id, data, file.content_type or "image/png")
+    return {"image_path": path, "url": db.project_image_signed_url(project_id)}
+
+
+@router.get("/{project_id}/image-url")
+def image_url(project_id: str) -> dict:
+    url = db.project_image_signed_url(project_id)
+    if not url:
+        raise HTTPException(status_code=404, detail="No image for this project")
+    return {"url": url}

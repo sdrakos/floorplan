@@ -17,6 +17,8 @@ from supabase import Client, create_client
 
 # Seeded by the init migration; the tenant the backend writes under in dev.
 DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001"
+PLANS_BUCKET = "plans"  # private bucket for floor-plan images
+_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
 
 _ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 
@@ -165,6 +167,45 @@ def update_offer(offer_id: str, fields: dict) -> dict | None:
 
 def delete_offer(offer_id: str) -> None:
     get_client().table("offers").delete().eq("id", offer_id).execute()
+
+
+def _bucket_names() -> set[str]:
+    try:
+        return {getattr(b, "name", None) or (b.get("name") if isinstance(b, dict) else None)
+                for b in get_client().storage.list_buckets()}
+    except Exception:
+        return set()
+
+
+def ensure_bucket(name: str = PLANS_BUCKET) -> None:
+    if name in _bucket_names():
+        return
+    try:
+        get_client().storage.create_bucket(name, options={"public": False})
+    except Exception:
+        pass  # already exists / race — fine
+
+
+def upload_project_image(project_id: str, data: bytes, content_type: str = "image/png",
+                         tenant_id: str = DEFAULT_TENANT_ID) -> str:
+    ensure_bucket()
+    ext = _EXT.get(content_type, "png")
+    path = f"{tenant_id}/{project_id}.{ext}"
+    get_client().storage.from_(PLANS_BUCKET).upload(
+        path, data, {"content-type": content_type, "upsert": "true"})
+    update_project(project_id, {"image_path": path})
+    return path
+
+
+def project_image_signed_url(project_id: str, expires_in: int = 3600) -> str | None:
+    project = get_project(project_id)
+    if not project or not project.get("image_path"):
+        return None
+    res = get_client().storage.from_(PLANS_BUCKET).create_signed_url(
+        project["image_path"], expires_in)
+    if isinstance(res, dict):
+        return res.get("signedURL") or res.get("signedUrl") or res.get("signed_url")
+    return res
 
 
 def replace_offer_content(offer_id: str, sections: list[dict],
