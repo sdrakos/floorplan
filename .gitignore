@@ -49,3 +49,6 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+
+# Generated preview PDFs
+_preview*.pdf

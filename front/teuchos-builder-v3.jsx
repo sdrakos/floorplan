@@ -265,11 +265,12 @@ export default function App(){
     if(!o) return;
     const content={sections:(o.sections||[]).map(s=>({name:s.name,note:s.note||null,
       items:(s.items||[]).map(i=>({description:i.description||"",quantity:i.quantity||0,unit:i.unit||"pcs",unit_price:i.unitPrice||0}))}))};
-    const meta={name:o.name,client:o.client||null,project_name:o.project||null,offer_date:o.date||null,vat_rate:o.vatRate??24};
+    const meta={name:o.name,client:o.client||null,project_name:o.project||null,offer_date:o.date||null,vat_rate:o.vatRate??24,
+      company:{name:o.companyName||"",address:o.companyAddr||"",web:o.companyWeb||""}};
     try{
       let cid=cloudIdRef.current[o.id];
-      if(!cid){const r=await fetch(API_URL+"/offers",{method:"POST",headers:JSON_H,body:JSON.stringify(meta)});if(!r.ok)throw 0;cid=(await r.json()).id;cloudIdRef.current[o.id]=cid;}
-      else{await fetch(API_URL+"/offers/"+cid,{method:"PUT",headers:JSON_H,body:JSON.stringify(meta)});}
+      if(!cid){const r=await fetch(API_URL+"/offers",{method:"POST",headers:JSON_H,body:JSON.stringify({name:o.name})});if(!r.ok)throw 0;cid=(await r.json()).id;cloudIdRef.current[o.id]=cid;}
+      await fetch(API_URL+"/offers/"+cid,{method:"PUT",headers:JSON_H,body:JSON.stringify(meta)});
       await fetch(API_URL+"/offers/"+cid+"/content",{method:"PUT",headers:JSON_H,body:JSON.stringify(content)});
       setCloud("☁️ συγχρονίστηκε");
     }catch{setCloud("☁️ offline");}
@@ -331,6 +332,7 @@ export default function App(){
           {saving&&<span style={{fontSize:10,background:"rgba(255,255,255,0.1)",padding:"4px 12px",borderRadius:20,color:"#a09080"}}>Saving...</span>}
           {cloud&&<span style={{fontSize:10,padding:"4px 12px",borderRadius:20,color:"#7fd8c0"}}>{cloud}</span>}
           <button style={B.back} onClick={cloudLoad}>☁️ Cloud</button>
+          {aid&&<button style={B.back} onClick={()=>{const cid=cloudIdRef.current[aid];if(cid){window.open(API_URL+"/offers/"+cid+"/pdf","_blank");}else{setCloud("Συγχρονίζεται… ξαναδοκίμασε");setTimeout(()=>setCloud(""),3000);}}}>⬇️ PDF</button>}
           {view!=="list"&&<button style={B.back} onClick={()=>{setView("list");setPreview(null);}}>← Λίστα</button>}
         </div>
       </header>

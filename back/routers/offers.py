@@ -1,10 +1,13 @@
 """APIRouter for offers / τεύχη (Supabase-backed). Mirrors the teuchos-builder
 data model: offer → sections → items. Server-side uses service_role."""
 from __future__ import annotations
+import io
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from .. import db
 from ..finance import offer_totals
+from ..pdf import offer_pdf_bytes
 from ..schema import OfferIn, OfferPatch, OfferContentReplace, OfferFromProject
 
 router = APIRouter(prefix="/offers", tags=["offers"])
@@ -42,6 +45,18 @@ def totals(offer_id: str) -> dict:
     if offer is None:
         raise HTTPException(status_code=404, detail="Offer not found")
     return offer_totals(offer)
+
+
+@router.get("/{offer_id}/pdf")
+def pdf(offer_id: str) -> StreamingResponse:
+    offer = db.get_offer(offer_id)
+    if offer is None:
+        raise HTTPException(status_code=404, detail="Offer not found")
+    data = offer_pdf_bytes(offer)
+    name = (offer.get("number") or offer_id[:8])
+    return StreamingResponse(
+        io.BytesIO(data), media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="offer-{name}.pdf"'})
 
 
 @router.put("/{offer_id}")
