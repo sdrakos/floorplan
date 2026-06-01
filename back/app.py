@@ -8,12 +8,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 try:  # works as a package module (uvicorn back.app:app)
-    from .routers import detect
+    from .routers import detect, projects
 except ImportError:  # works as a plain script (python back/app.py)
     import os
     import sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from back.routers import detect
+    from back.routers import detect, projects
 
 app = FastAPI(title="FloorPlan Room Detection", version="0.1.0")
 
@@ -25,6 +25,7 @@ app.add_middleware(
 )
 
 app.include_router(detect.router)
+app.include_router(projects.router)
 
 
 if __name__ == "__main__":

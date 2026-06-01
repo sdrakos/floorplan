@@ -76,6 +76,9 @@ export default function FloorPlanTakeoff() {
   // AI Detection
   const [detecting, setDetecting] = useState(false);
   const [engine, setEngine] = useState("classical"); // backend engine: classical | cubicasa
+  const [cloudStatus, setCloudStatus] = useState(""); // Supabase sync indicator
+  const cloudIdRef = useRef({});      // local project id -> Supabase project id
+  const cloudTimerRef = useRef(null);
 
   // Custom Layers
   const [customLayers, setCustomLayers] = useState([]);
@@ -633,6 +636,94 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
     return len;
   }, []);
 
+  // ── Cloud sync (Supabase via back/ API) ──────────────────────────────────
+  // Pushes the active project's structured data (calibration + shapes) to the
+  // backend. The image stays in local storage for now (multi-device image needs
+  // Supabase Storage — a follow-up). Best-effort: stays usable offline.
+  const buildCalibration = () => ({
+    pixelsPerMeter, wallHeight, calLine, calMeters, calibrated, imgSize, customLayers,
+  });
+  const buildShapesPayload = () =>
+    shapes.map((s) => {
+      const area_px2 = s.type === "polygon" ? polyArea(s.points) : 0;
+      return {
+        kind: s.type, layer: s.layer, label: s.label || null, points: s.points,
+        area_px2, area_m2: area_px2 ? px2m(Math.sqrt(area_px2)) ** 2 : null,
+      };
+    });
+
+  const cloudSaveActive = async () => {
+    if (!activeProjectId) return;
+    const proj = projects.find((p) => p.id === activeProjectId);
+    if (!proj) return;
+    const calibration = buildCalibration();
+    try {
+      let cloudId = cloudIdRef.current[activeProjectId];
+      if (!cloudId) {
+        const res = await fetch(BACKEND_URL + "/projects", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: proj.name, calibration }),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        cloudId = (await res.json()).id;
+        cloudIdRef.current[activeProjectId] = cloudId;
+      } else {
+        await fetch(BACKEND_URL + "/projects/" + cloudId, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: proj.name, calibration }),
+        });
+      }
+      await fetch(BACKEND_URL + "/projects/" + cloudId + "/shapes", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shapes: buildShapesPayload() }),
+      });
+      setCloudStatus("☁️ συγχρονίστηκε");
+    } catch {
+      setCloudStatus("☁️ offline");
+    }
+    setTimeout(() => setCloudStatus(""), 4000);
+  };
+
+  const cloudLoadList = async () => {
+    try {
+      const res = await fetch(BACKEND_URL + "/projects");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const cloud = await res.json();
+      setProjects((prev) => {
+        const known = new Set(Object.values(cloudIdRef.current));
+        const imported = cloud
+          .filter((c) => !known.has(c.id))
+          .map((c) => {
+            const cal = c.calibration || {};
+            const localId = uid();
+            cloudIdRef.current[localId] = c.id;
+            return {
+              id: localId, name: c.name + " (cloud)", image: null,
+              imgSize: cal.imgSize || { w: 0, h: 0 },
+              calibrated: cal.calibrated || false, calLine: cal.calLine || null,
+              calMeters: cal.calMeters || "", pixelsPerMeter: cal.pixelsPerMeter || 0,
+              shapes: [], wallHeight: cal.wallHeight || WALL_HEIGHT,
+              customLayers: cal.customLayers || [], _cloudId: c.id,
+              createdAt: Date.now(), updatedAt: Date.now(),
+            };
+          });
+        return [...prev, ...imported];
+      });
+      setCloudStatus("☁️ φορτώθηκαν από cloud");
+    } catch {
+      setCloudStatus("☁️ offline");
+    }
+    setTimeout(() => setCloudStatus(""), 4000);
+  };
+
+  // Debounced auto-push of structured data when it changes.
+  useEffect(() => {
+    if (!activeProjectId || loading) return;
+    if (cloudTimerRef.current) clearTimeout(cloudTimerRef.current);
+    cloudTimerRef.current = setTimeout(() => { cloudSaveActive(); }, 1500);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shapes, calibrated, pixelsPerMeter, wallHeight, customLayers, calMeters, activeProjectId]);
+
   // ── Mouse position relative to image ──
   const getPos = (e) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -959,7 +1050,11 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
         <div style={{ maxWidth: 800, margin: "0 auto", padding: "32px 20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
             <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, margin: 0, color: "#3a3028" }}>Τα Projects σου</h2>
-            <button style={S.primaryBtn} onClick={() => createProject()}>+ Νέο Project</button>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {cloudStatus && <span style={{ fontSize: 12, color: "#16A085", fontWeight: 600 }}>{cloudStatus}</span>}
+              <button style={{ ...S.primaryBtn, background: "#16A085" }} onClick={cloudLoadList}>☁️ Φόρτωση από Cloud</button>
+              <button style={S.primaryBtn} onClick={() => createProject()}>+ Νέο Project</button>
+            </div>
           </div>
 
           {projects.length === 0 ? (

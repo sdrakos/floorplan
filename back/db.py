@@ -61,3 +61,58 @@ def upsert_conversation(session: str, tenant_id: str = DEFAULT_TENANT_ID, **fiel
     row = {"tenant_id": tenant_id, "session": session, **fields}
     return (get_client().table("conversations")
             .upsert(row, on_conflict="tenant_id,session").execute().data[0])
+
+
+# ── projects + shapes ─────────────────────────────────────────────────────────
+
+def list_projects(tenant_id: str = DEFAULT_TENANT_ID) -> list[dict]:
+    return (get_client().table("projects").select("*")
+            .eq("tenant_id", tenant_id).order("updated_at", desc=True).execute().data)
+
+
+def create_project(name: str, calibration: dict | None = None,
+                   image_path: str | None = None, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    row = {"tenant_id": tenant_id, "name": name,
+           "calibration": calibration or {}, "image_path": image_path}
+    return get_client().table("projects").insert(row).execute().data[0]
+
+
+def get_project(project_id: str) -> dict | None:
+    rows = get_client().table("projects").select("*").eq("id", project_id).execute().data
+    if not rows:
+        return None
+    project = rows[0]
+    project["shapes"] = get_shapes(project_id)
+    return project
+
+
+def update_project(project_id: str, fields: dict) -> dict | None:
+    allowed = {k: v for k, v in fields.items() if k in ("name", "calibration", "image_path")}
+    if not allowed:
+        return get_project(project_id)
+    rows = get_client().table("projects").update(allowed).eq("id", project_id).execute().data
+    return rows[0] if rows else None
+
+
+def delete_project(project_id: str) -> None:
+    get_client().table("projects").delete().eq("id", project_id).execute()
+
+
+def get_shapes(project_id: str) -> list[dict]:
+    return (get_client().table("shapes").select("*")
+            .eq("project_id", project_id).order("created_at").execute().data)
+
+
+def replace_shapes(project_id: str, shapes: list[dict], tenant_id: str = DEFAULT_TENANT_ID) -> list[dict]:
+    """Bulk replace all shapes of a project (matches the front's save-everything model)."""
+    client = get_client()
+    client.table("shapes").delete().eq("project_id", project_id).execute()
+    if not shapes:
+        return []
+    rows = [{
+        "tenant_id": tenant_id, "project_id": project_id,
+        "kind": s.get("kind", "polygon"), "layer": s.get("layer", "room_internal"),
+        "label": s.get("label"), "points": s.get("points", []),
+        "area_px2": s.get("area_px2"), "area_m2": s.get("area_m2"),
+    } for s in shapes]
+    return client.table("shapes").insert(rows).execute().data
