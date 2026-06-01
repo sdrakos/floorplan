@@ -210,6 +210,33 @@ def project_image_signed_url(project_id: str, expires_in: int = 3600) -> str | N
     return res
 
 
+def list_catalog(category: str | None = None, q: str | None = None,
+                 tenant_id: str = DEFAULT_TENANT_ID) -> list[dict]:
+    """Global catalog (tenant_id IS NULL) plus the tenant's own items."""
+    query = get_client().table("catalog_items").select("*").or_(
+        f"tenant_id.is.null,tenant_id.eq.{tenant_id}")
+    if category:
+        query = query.eq("category", category)
+    if q:
+        query = query.ilike("description", f"%{q}%")
+    return query.order("category").order("code").limit(2000).execute().data
+
+
+def catalog_categories(tenant_id: str = DEFAULT_TENANT_ID) -> list[str]:
+    rows = get_client().table("catalog_items").select("category").or_(
+        f"tenant_id.is.null,tenant_id.eq.{tenant_id}").execute().data
+    return sorted({r["category"] for r in rows})
+
+
+def reseed_global_catalog(rows: list[dict]) -> int:
+    """Replace the global catalog (tenant_id IS NULL) with `rows`. Idempotent."""
+    c = get_client()
+    c.table("catalog_items").delete().is_("tenant_id", "null").execute()
+    if rows:
+        c.table("catalog_items").insert(rows).execute()
+    return len(rows)
+
+
 def create_offer_from_quantities(name: str, sections: list[dict], project_id: str | None = None,
                                  tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     """Create an offer linked to a project and fill it from takeoff-derived quantities."""
