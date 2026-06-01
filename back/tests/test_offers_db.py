@@ -48,3 +48,25 @@ def test_offer_crud_and_content():
     finally:
         db.delete_offer(oid)
         assert db.get_offer(oid) is None
+
+
+def test_offer_from_quantities_roundtrip():
+    sections = [
+        {"name": "6. Πλακίδια", "items": [
+            {"description": "Πλακίδια δαπέδου", "quantity": 40.0, "unit": "m²", "unit_price": 18},
+        ]},
+        {"name": "7. Χρωματισμοί", "items": [
+            {"description": "Χρωματισμοί τοίχοι", "quantity": 120.0, "unit": "m²", "unit_price": 12},
+            {"description": "Χρωματισμοί οροφές", "quantity": 40.0, "unit": "m²", "unit_price": 12},
+        ]},
+    ]
+    offer = db.create_offer_from_quantities("Villa — auto", sections)
+    oid = offer["id"]
+    try:
+        full = db.get_offer(oid)
+        assert len(full["sections"]) == 2
+        total = sum(i["quantity"] * i["unit_price"]
+                    for s in full["sections"] for i in s["items"])
+        assert total == 40 * 18 + 120 * 12 + 40 * 12   # 720 + 1440 + 480
+    finally:
+        db.delete_offer(oid)

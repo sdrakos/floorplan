@@ -91,3 +91,9 @@ class OfferSectionIn(BaseModel):
 
 class OfferContentReplace(BaseModel):
     sections: list[OfferSectionIn]
+
+
+class OfferFromProject(BaseModel):
+    name: str = "Προσφορά"
+    project_id: str | None = None
+    sections: list[OfferSectionIn] = Field(default_factory=list)

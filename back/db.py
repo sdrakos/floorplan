@@ -208,6 +208,15 @@ def project_image_signed_url(project_id: str, expires_in: int = 3600) -> str | N
     return res
 
 
+def create_offer_from_quantities(name: str, sections: list[dict], project_id: str | None = None,
+                                 tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    """Create an offer linked to a project and fill it from takeoff-derived quantities."""
+    offer = get_client().table("offers").insert(
+        {"tenant_id": tenant_id, "name": name, "project_id": project_id}).execute().data[0]
+    replace_offer_content(offer["id"], sections, tenant_id)
+    return offer
+
+
 def replace_offer_content(offer_id: str, sections: list[dict],
                           tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     """Bulk replace all sections + items of an offer (front save-everything model)."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from .. import db
-from ..schema import OfferIn, OfferPatch, OfferContentReplace
+from ..schema import OfferIn, OfferPatch, OfferContentReplace, OfferFromProject
 
 router = APIRouter(prefix="/offers", tags=["offers"])
 
@@ -12,6 +12,14 @@ router = APIRouter(prefix="/offers", tags=["offers"])
 @router.get("")
 def list_offers() -> list[dict]:
     return db.list_offers()
+
+
+@router.post("/from-project")
+def from_project(body: OfferFromProject) -> dict:
+    """Create a priced offer from takeoff-derived quantities (Phase 1 link)."""
+    offer = db.create_offer_from_quantities(
+        body.name, [s.model_dump() for s in body.sections], body.project_id)
+    return {"offer_id": offer["id"], "name": offer["name"]}
 
 
 @router.post("")

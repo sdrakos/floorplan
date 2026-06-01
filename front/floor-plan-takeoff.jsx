@@ -1033,6 +1033,32 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
     URL.revokeObjectURL(url);
   };
 
+  // ── Create a priced offer in Supabase from the derived quantities (Phase 1) ──
+  const createOfferFromTakeoff = async () => {
+    const dq = deriveQuantities();
+    if (!dq.length) { setCloudStatus("Δεν υπάρχουν ποσότητες ακόμα"); setTimeout(() => setCloudStatus(""), 4000); return; }
+    const bySec = {};
+    dq.forEach((it) => {
+      (bySec[it.sec] = bySec[it.sec] || []).push({
+        description: it.desc, quantity: Math.round(it.qty * 100) / 100, unit: it.unit, unit_price: it.price,
+      });
+    });
+    const sections = Object.entries(bySec).map(([name, items]) => ({ name, items }));
+    const proj = projects.find((p) => p.id === activeProjectId);
+    try {
+      const res = await fetch(BACKEND_URL + "/offers/from-project", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: proj?.name || "Προσφορά", project_id: cloudIdRef.current[activeProjectId] || null, sections }),
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const j = await res.json();
+      setCloudStatus("✓ Προσφορά δημιουργήθηκε (" + String(j.offer_id).slice(0, 8) + "). Άνοιξέ την στο Τεύχος Builder.");
+    } catch {
+      setCloudStatus("✗ Backend — τρέχει ο server;");
+    }
+    setTimeout(() => setCloudStatus(""), 8000);
+  };
+
   // ── Render ──
   const layerInfo = LAYER_TYPES.find((l) => l.id === activeLayer);
   const activeProject = projects.find(p => p.id === activeProjectId);
@@ -1489,6 +1515,8 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
             </div>
 
             <button style={{ ...S.primaryBtn, width: "100%", marginTop: 12, justifyContent: "center" }} onClick={exportJSON}>💾 Export JSON για Τεύχος</button>
+            <button style={{ ...S.primaryBtn, width: "100%", marginTop: 8, justifyContent: "center", background: "#16A085" }} onClick={createOfferFromTakeoff}>📋 Δημιουργία Προσφοράς (Cloud)</button>
+            {cloudStatus && <p style={{ fontSize: 10, color: cloudStatus.startsWith("✓") ? "#27ae60" : cloudStatus.startsWith("✗") ? "#c0392b" : "#8B7355", margin: "8px 0 0", lineHeight: 1.4, fontWeight: 600 }}>{cloudStatus}</p>}
           </div>
         )}
       </div>
