@@ -1,11 +1,13 @@
 import { useState } from "react";
 import FloorPlanTakeoff from "../floor-plan-takeoff.jsx";
 import TeuchosBuilder from "../teuchos-builder-v3.jsx";
+import CatalogManager from "./CatalogManager.jsx";
 
-// Top-level shell with a menu to switch between the two tools.
+// Top-level shell with a menu to switch between the tools.
 const TABS = [
   { id: "takeoff", label: "📐 Κατόψεις / Μετρήσεις", C: FloorPlanTakeoff },
   { id: "offers", label: "📋 Προσφορές (Τεύχος)", C: TeuchosBuilder },
+  { id: "catalog", label: "📚 Κατάλογος", C: CatalogManager },
 ];
 
 export default function App() {
