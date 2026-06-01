@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from .. import db
+from ..finance import offer_totals
 from ..schema import OfferIn, OfferPatch, OfferContentReplace, OfferFromProject
 
 router = APIRouter(prefix="/offers", tags=["offers"])
@@ -33,6 +34,14 @@ def get_offer(offer_id: str) -> dict:
     if offer is None:
         raise HTTPException(status_code=404, detail="Offer not found")
     return offer
+
+
+@router.get("/{offer_id}/totals")
+def totals(offer_id: str) -> dict:
+    offer = db.get_offer(offer_id)
+    if offer is None:
+        raise HTTPException(status_code=404, detail="Offer not found")
+    return offer_totals(offer)
 
 
 @router.put("/{offer_id}")

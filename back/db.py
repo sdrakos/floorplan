@@ -158,7 +158,9 @@ def get_offer(offer_id: str) -> dict | None:
 
 def update_offer(offer_id: str, fields: dict) -> dict | None:
     allowed = {k: v for k, v in fields.items()
-               if k in ("name", "client", "project_name", "offer_date")}
+               if k in ("name", "client", "project_name", "offer_date", "vat_rate",
+                        "discount_pct", "status", "terms", "notes", "valid_until",
+                        "number", "company", "client_id")}
     if not allowed:
         return get_offer(offer_id)
     rows = get_client().table("offers").update(allowed).eq("id", offer_id).execute().data

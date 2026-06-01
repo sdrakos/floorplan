@@ -74,6 +74,12 @@ class OfferPatch(BaseModel):
     client: str | None = None
     project_name: str | None = None
     offer_date: str | None = None
+    vat_rate: float | None = None
+    discount_pct: float | None = None
+    status: str | None = None
+    terms: str | None = None
+    notes: str | None = None
+    valid_until: str | None = None
 
 
 class OfferItemIn(BaseModel):

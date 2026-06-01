@@ -205,7 +205,7 @@ const fN = (n) => new Intl.NumberFormat("el-GR",{minimumFractionDigits:2,maximum
 const mkOffer = (t, name) => ({
   id: uid(), name: name||t.name, client:"", project:"", date: new Date().toISOString().split("T")[0],
   companyName:"", companyAddr:"", companyWeb:"", logo:"",
-  numUnits: 1, islandSurcharge: false,
+  numUnits: 1, islandSurcharge: false, vatRate: 24,
   sections: t.sections.map(s=>({ id:uid(), name:s.name, collapsed:false, note:"",
     items: s.items.map(i=>({ id:uid(), description:i.d, quantity:0, unit:i.u||"pcs", unitPrice:i.p||0, notes:"" }))
   })), createdAt:Date.now(), updatedAt:Date.now()
@@ -265,7 +265,7 @@ export default function App(){
     if(!o) return;
     const content={sections:(o.sections||[]).map(s=>({name:s.name,note:s.note||null,
       items:(s.items||[]).map(i=>({description:i.description||"",quantity:i.quantity||0,unit:i.unit||"pcs",unit_price:i.unitPrice||0}))}))};
-    const meta={name:o.name,client:o.client||null,project_name:o.project||null,offer_date:o.date||null};
+    const meta={name:o.name,client:o.client||null,project_name:o.project||null,offer_date:o.date||null,vat_rate:o.vatRate??24};
     try{
       let cid=cloudIdRef.current[o.id];
       if(!cid){const r=await fetch(API_URL+"/offers",{method:"POST",headers:JSON_H,body:JSON.stringify(meta)});if(!r.ok)throw 0;cid=(await r.json()).id;cloudIdRef.current[o.id]=cid;}
@@ -518,6 +518,12 @@ function EditV({offer,uF,addSec,uSec,dSec,addIt,uIt,dIt,sT,oT,onPrev,onTmpl,onCs
           <span style={{fontSize:18,fontFamily:"'Cormorant Garamond',serif",fontWeight:600,color:"#ddd3c4"}}>{fmt(perUnit)}</span>
         </div>
       )}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,0.1)"}}>
+        <span style={{fontSize:11,color:"#a09080",display:"flex",alignItems:"center",gap:6}}>ΦΠΑ
+          <input type="number" value={offer.vatRate??24} onChange={e=>uF("vatRate",parseFloat(e.target.value)||0)} style={{width:50,padding:"2px 6px",borderRadius:6,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)",color:"#f5f0e8",fontSize:12}}/>%
+        </span>
+        <span style={{fontSize:18,fontFamily:"'Cormorant Garamond',serif",fontWeight:700,color:"#7fd8c0"}}>Με ΦΠΑ: {fmt(adjTotal*(1+(offer.vatRate??24)/100))}</span>
+      </div>
     </div>
 
     {offer.sections.map((s,i)=><SecBlock key={s.id} s={s} i={i} u={u=>uSec(s.id,u)} rm={()=>dSec(s.id)} aI={()=>addIt(s.id)} uI={(iid,u)=>uIt(s.id,iid,u)} dI={iid=>dIt(s.id,iid)} t={sT(s)}/>)}
@@ -728,6 +734,20 @@ function PrevV({offer,oT,sT,onBack}){
             <td style={{padding:"10px 12px",fontWeight:700,color:dark,fontSize:15}}>Σύνολο με προσαύξηση</td>
             <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:dark,fontSize:18,fontFamily:"'JetBrains Mono',monospace"}}>{fN(oT(offer)*1.15)}</td>
           </tr>}
+          {(()=>{const net=oT(offer)*(offer.islandSurcharge?1.15:1);const vr=offer.vatRate??24;const vat=net*vr/100;return(<>
+            <tr style={{borderTop:`1px solid ${accent}44`}}>
+              <td style={{padding:"8px 12px",color:dark,fontSize:13}}>Καθαρή αξία</td>
+              <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"'JetBrains Mono',monospace",color:dark,fontSize:14}}>{fN(net)}</td>
+            </tr>
+            <tr>
+              <td style={{padding:"8px 12px",color:dark,fontSize:13}}>ΦΠΑ {vr}%</td>
+              <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"'JetBrains Mono',monospace",color:dark,fontSize:14}}>{fN(vat)}</td>
+            </tr>
+            <tr style={{borderTop:`2px solid ${accent}`}}>
+              <td style={{padding:"12px 12px",fontWeight:700,color:accent,fontSize:16}}>Τελικό Σύνολο (με ΦΠΑ)</td>
+              <td style={{padding:"12px 12px",textAlign:"right",fontWeight:700,color:accent,fontSize:20,fontFamily:"'JetBrains Mono',monospace"}}>{fN(net+vat)}</td>
+            </tr>
+          </>);})()}
           {(offer.numUnits||1)>1&&<tr style={{borderTop:`1px solid ${accent}44`}}>
             <td style={{padding:"8px 12px",fontSize:13,color:"#8a7a6a"}}>Κόστος ανά μονάδα ({offer.numUnits} μον.)</td>
             <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"'JetBrains Mono',monospace",fontSize:14,color:"#8a7a6a"}}>{fN((oT(offer)*(offer.islandSurcharge?1.15:1))/offer.numUnits)}</td>
