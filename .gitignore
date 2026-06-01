@@ -10,6 +10,8 @@ claude.db
 
 # ── Generated overlay renders ──────────────────────────
 *.overlay.png
+*.classical.png
+*.cubicasa.png
 
 # ── Python ─────────────────────────────────────────────
 __pycache__/
