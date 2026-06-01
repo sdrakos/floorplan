@@ -1,6 +1,7 @@
 """APIRouter for room detection."""
 from __future__ import annotations
 import io
+import os
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from PIL import Image, UnidentifiedImageError
@@ -12,6 +13,19 @@ from ..overlay import render_overlay
 from ..schema import DetectResponse, HealthResponse, ImageSize, Point, Room
 
 router = APIRouter()
+
+# Best-effort detection logging to Supabase. Disable with FLOORPLAN_DB_LOG=0 (e.g. in tests).
+_DB_LOG = os.environ.get("FLOORPLAN_DB_LOG", "1") != "0"
+
+
+def _log_detection(engine: str | None, room_count: int) -> None:
+    if not _DB_LOG:
+        return
+    try:
+        from ..db import log_detection
+        log_detection(engine=engine or "cubicasa", room_count=room_count)
+    except Exception:
+        pass  # logging must never break detection
 
 
 def _read_image(raw: bytes) -> Image.Image:
@@ -49,6 +63,7 @@ async def detect(
             areaPx2=area_px2,
             areaM2=px2_to_m2(area_px2, pixels_per_meter),
         ))
+    _log_detection(engine, len(rooms))
     return DetectResponse(
         imageSize=ImageSize(w=image.width, h=image.height),
         pixelsPerMeter=pixels_per_meter,
@@ -68,6 +83,7 @@ async def detect_overlay(
         detector = get_detector_for(engine)
     image = _read_image(await file.read())
     rooms = detector.detect(image)
+    _log_detection(engine, len(rooms))
     rendered = render_overlay(image, rooms, pixels_per_meter)
     buf = io.BytesIO()
     rendered.save(buf, format="PNG")

@@ -1,3 +1,6 @@
+import os
+os.environ["FLOORPLAN_DB_LOG"] = "0"  # don't write to Supabase during tests
+
 import io
 from PIL import Image
 from fastapi.testclient import TestClient
