@@ -21,6 +21,12 @@ DEFAULT_SAMPLES = ["2-Bedroom-Home-Plan-With-Dimensions.png", "φλοορ2.jpg"]
 
 
 def make_detector(engine: str):
+    if engine == "gemini":
+        from back.detector.gemini import GeminiDetector
+        return GeminiDetector()
+    if engine == "claude":
+        from back.detector.claude import ClaudeDetector
+        return ClaudeDetector()
     if engine == "sam":
         from back.detector.sam import SamDetector
         return SamDetector()
@@ -36,7 +42,7 @@ def make_detector(engine: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--engine", choices=["cubicasa", "classical", "planar", "sam"], default="cubicasa")
+    ap.add_argument("--engine", choices=["cubicasa", "classical", "planar", "sam", "gemini", "claude"], default="cubicasa")
     ap.add_argument("--ppm", type=float, default=None, help="pixels per meter (for m²)")
     ap.add_argument("--suffix", default="overlay", help="output suffix")
     ap.add_argument("images", nargs="*", help="image paths (default: the two samples)")
