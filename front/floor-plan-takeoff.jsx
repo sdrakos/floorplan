@@ -75,7 +75,7 @@ export default function FloorPlanTakeoff() {
 
   // AI Detection
   const [detecting, setDetecting] = useState(false);
-  const [engine, setEngine] = useState("classical"); // backend engine: classical | cubicasa
+  const [engine, setEngine] = useState("gemini"); // backend engine: gemini | claude | classical | cubicasa
   const [cloudStatus, setCloudStatus] = useState(""); // Supabase sync indicator
   const cloudIdRef = useRef({});      // local project id -> Supabase project id
   const cloudTimerRef = useRef(null);
@@ -1115,9 +1115,10 @@ export default function FloorPlanTakeoff() {
               {image && (
                 <div style={S.toolSection}>
                   <p style={S.toolLabel}>🖥️ Backend Αναγνώριση (local)</p>
-                  <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
-                    <button style={{ ...S.layerBtn, flex: 1, justifyContent: "center", fontWeight: engine === "classical" ? 700 : 400, background: engine === "classical" ? "#16A08518" : undefined }} onClick={() => setEngine("classical")}>Classical CV</button>
-                    <button style={{ ...S.layerBtn, flex: 1, justifyContent: "center", fontWeight: engine === "cubicasa" ? 700 : 400, background: engine === "cubicasa" ? "#2E86AB18" : undefined }} onClick={() => setEngine("cubicasa")}>CubiCasa</button>
+                  <div style={{ display: "flex", gap: 4, marginBottom: 4, flexWrap: "wrap" }}>
+                    {[["gemini", "✨ Gemini AI"], ["claude", "Claude AI"], ["classical", "Classical"], ["cubicasa", "CubiCasa"]].map(([id, lbl]) => (
+                      <button key={id} style={{ ...S.layerBtn, flex: "1 1 45%", justifyContent: "center", fontWeight: engine === id ? 700 : 400, background: engine === id ? "#16A08518" : undefined }} onClick={() => setEngine(id)}>{lbl}</button>
+                    ))}
                   </div>
                   <button style={{ ...S.primaryBtn, background: detecting ? "#aaa" : "#16A085", opacity: detecting ? 0.7 : 1 }} onClick={autoDetectBackend} disabled={detecting}>
                     {detecting ? "⏳ Αναγνώριση..." : "🔍 Αναγνώριση από Backend"}
