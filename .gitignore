@@ -12,6 +12,7 @@ claude.db
 *.overlay.png
 *.classical.png
 *.cubicasa.png
+*.planar.png
 
 # ── Python ─────────────────────────────────────────────
 __pycache__/

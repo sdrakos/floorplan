@@ -23,8 +23,16 @@ def _claude() -> RoomDetector:
     return ClaudeDetector()
 
 
+@lru_cache(maxsize=1)
+def _planar() -> RoomDetector:
+    from .detector.planar import WallGraphDetector
+    return WallGraphDetector()
+
+
 def get_detector_for(engine: str | None) -> RoomDetector:
     """Select an engine by name; falls back to the default (CubiCasa)."""
+    if engine == "planar":
+        return _planar()
     if engine == "classical":
         return _classical()
     if engine == "claude":

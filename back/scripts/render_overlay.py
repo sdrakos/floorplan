@@ -21,6 +21,9 @@ DEFAULT_SAMPLES = ["2-Bedroom-Home-Plan-With-Dimensions.png", "φλοορ2.jpg"]
 
 
 def make_detector(engine: str):
+    if engine == "planar":
+        from back.detector.planar import WallGraphDetector
+        return WallGraphDetector()
     if engine == "classical":
         from back.detector.classical import ClassicalDetector
         return ClassicalDetector()
@@ -30,7 +33,7 @@ def make_detector(engine: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--engine", choices=["cubicasa", "classical"], default="cubicasa")
+    ap.add_argument("--engine", choices=["cubicasa", "classical", "planar"], default="cubicasa")
     ap.add_argument("--ppm", type=float, default=None, help="pixels per meter (for m²)")
     ap.add_argument("--suffix", default="overlay", help="output suffix")
     ap.add_argument("images", nargs="*", help="image paths (default: the two samples)")
