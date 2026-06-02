@@ -13,6 +13,7 @@ claude.db
 *.classical.png
 *.cubicasa.png
 *.planar.png
+*.sam.png
 
 # ── Python ─────────────────────────────────────────────
 __pycache__/

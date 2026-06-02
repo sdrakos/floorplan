@@ -24,17 +24,33 @@ def _claude() -> RoomDetector:
 
 
 @lru_cache(maxsize=1)
+def _gemini() -> RoomDetector:
+    from .detector.gemini import GeminiDetector
+    return GeminiDetector()
+
+
+@lru_cache(maxsize=1)
 def _planar() -> RoomDetector:
     from .detector.planar import WallGraphDetector
     return WallGraphDetector()
+
+
+@lru_cache(maxsize=1)
+def _sam() -> RoomDetector:
+    from .detector.sam import SamDetector
+    return SamDetector()
 
 
 def get_detector_for(engine: str | None) -> RoomDetector:
     """Select an engine by name; falls back to the default (CubiCasa)."""
     if engine == "planar":
         return _planar()
+    if engine == "sam":
+        return _sam()
     if engine == "classical":
         return _classical()
     if engine == "claude":
         return _claude()
+    if engine == "gemini":
+        return _gemini()
     return get_detector()
