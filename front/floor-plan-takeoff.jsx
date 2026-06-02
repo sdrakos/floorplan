@@ -80,6 +80,7 @@ export default function FloorPlanTakeoff() {
   const cloudIdRef = useRef({});      // local project id -> Supabase project id
   const cloudTimerRef = useRef(null);
   const imageUploadedRef = useRef({}); // cloud project id -> last uploaded image dataURL
+  const [catPrices, setCatPrices] = useState({}); // catalog code -> unit_price (single source of truth)
 
   // Custom Layers
   const [customLayers, setCustomLayers] = useState([]);
@@ -108,6 +109,19 @@ export default function FloorPlanTakeoff() {
         }
       } catch {}
       setLoading(false);
+    })();
+  }, []);
+
+  // ── Load catalog unit prices (single source of truth for derived quantities) ──
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(BACKEND_URL + "/catalog");
+        if (!r.ok) return;
+        const m = {};
+        for (const it of await r.json()) if (it.code) m[it.code] = Number(it.unit_price);
+        setCatPrices(m);
+      } catch {}
     })();
   }, []);
 
@@ -929,6 +943,10 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
     const q = quantities();
     const h = wallHeight;
     const results = [];
+    // Unit price from the catalog (code) if available, else the indicative fallback.
+    const P = (code, fb) => (code && catPrices[code] != null ? Number(catPrices[code]) : fb);
+    const push = (sec, desc, qty, unit, code, fb) =>
+      results.push({ sec, desc, qty, unit, code: code || null, price: P(code, fb) });
 
     // Floor areas
     const intArea = q.room_internal.totalM2 + q.room_kitchen.totalM2;
@@ -938,74 +956,74 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
     const parkArea = q.parking.totalM2;
     const totalFootprint = intArea + wcArea;
 
-    if (intArea > 0) results.push({ sec: "6. Πλακίδια", desc: "Πλακίδια δαπέδου εσωτερικά", qty: intArea, unit: "m²", price: 18 });
-    if (wcArea > 0) results.push({ sec: "6. Πλακίδια", desc: "Πλακίδια δαπέδου WC", qty: wcArea, unit: "m²", price: 18 });
-    if (balcArea > 0) results.push({ sec: "6. Πλακίδια", desc: "Πλακίδια δαπέδου μπαλκονιών", qty: balcArea, unit: "m²", price: 20 });
-    if (terrArea > 0) results.push({ sec: "8. Στεγανοποίηση", desc: "Στεγανοποίηση ταράτσας", qty: terrArea, unit: "m²", price: 42 });
-    if (parkArea > 0) results.push({ sec: "6. Πλακίδια", desc: "Κυβόλιθοι parking", qty: parkArea, unit: "m²", price: 11 });
+    if (intArea > 0) push("6. Πλακίδια", "Πλακίδια δαπέδου εσωτερικά", intArea, "m²", "PLA-01", 18);
+    if (wcArea > 0) push("6. Πλακίδια", "Πλακίδια δαπέδου WC", wcArea, "m²", "PLA-01", 18);
+    if (balcArea > 0) push("6. Πλακίδια", "Πλακίδια δαπέδου μπαλκονιών", balcArea, "m²", "PLA-01", 20);
+    if (terrArea > 0) push("8. Στεγανοποίηση", "Θερμομόνωση/στεγανοποίηση ταράτσας", terrArea, "m²", "MON-02", 42);
+    if (parkArea > 0) push("6. Πλακίδια", "Κυβόλιθοι parking", parkArea, "m²", null, 11);
 
     // Ceilings
-    if (intArea > 0) results.push({ sec: "4. Ξηρά Δόμηση", desc: "Ψευδοροφή (σαλόνι/τραπεζαρία/υπνοδ.)", qty: intArea * 0.6, unit: "m²", price: 23 });
-    if (wcArea > 0) results.push({ sec: "4. Ξηρά Δόμηση", desc: "Ψευδοροφή ανθυγρή (WC)", qty: wcArea, unit: "m²", price: 28 });
+    if (intArea > 0) push("4. Ξηρά Δόμηση", "Ψευδοροφή (σαλόνι/τραπεζαρία/υπνοδ.)", intArea * 0.6, "m²", "GYP-04", 23);
+    if (wcArea > 0) push("4. Ξηρά Δόμηση", "Ψευδοροφή ανθυγρή (WC)", wcArea, "m²", "GYP-05", 28);
 
     // Painting
     const intWallArea = q.room_internal.totalM * h + q.room_kitchen.totalM * h;
     const intCeilingArea = intArea;
-    if (intWallArea > 0) results.push({ sec: "7. Χρωματισμοί", desc: "Χρωματισμοί εσωτερικοί (τοίχοι)", qty: intWallArea, unit: "m²", price: 12 });
-    if (intCeilingArea > 0) results.push({ sec: "7. Χρωματισμοί", desc: "Χρωματισμοί εσωτερικοί (οροφές)", qty: intCeilingArea, unit: "m²", price: 12 });
+    if (intWallArea > 0) push("7. Χρωματισμοί", "Χρωματισμοί εσωτερικοί (τοίχοι)", intWallArea, "m²", "XRO-01", 12);
+    if (intCeilingArea > 0) push("7. Χρωματισμοί", "Χρωματισμοί εσωτερικοί (οροφές)", intCeilingArea, "m²", "XRO-01", 12);
 
     // WC wall tiles
     const wcPerim = q.room_wc.totalM;
-    if (wcPerim > 0) results.push({ sec: "6. Πλακίδια", desc: "Πλακίδια τοίχων WC (ύψος 2.40m)", qty: wcPerim * TILE_HEIGHT_WC, unit: "m²", price: 18 });
+    if (wcPerim > 0) push("6. Πλακίδια", "Πλακίδια τοίχων WC (ύψος 2.40m)", wcPerim * TILE_HEIGHT_WC, "m²", "PLA-02", 18);
 
     // Walls
     const extWallLen = q.wall_ext.totalM;
     const intWallLen = q.wall_int.totalM;
     const wcWallLen = q.wall_wc.totalM;
-    if (extWallLen > 0) results.push({ sec: "3. Τοιχοποιία", desc: "Εξωτερική διπλή τοιχοποιία", qty: extWallLen * h, unit: "m²", price: 40 });
-    if (intWallLen > 0) results.push({ sec: "4. Ξηρά Δόμηση", desc: "Χώρισμα γυψοσανίδα (1+1)", qty: intWallLen * h, unit: "m²", price: 24 });
-    if (wcWallLen > 0) results.push({ sec: "4. Ξηρά Δόμηση", desc: "Χώρισμα WC ανθυγρή (Κ+Α)", qty: wcWallLen * h, unit: "m²", price: 28 });
+    if (extWallLen > 0) push("3. Τοιχοποιία", "Εξωτερική διπλή τοιχοποιία", extWallLen * h, "m²", "TOI-01", 40);
+    if (intWallLen > 0) push("4. Ξηρά Δόμηση", "Χώρισμα γυψοσανίδα (1+1)", intWallLen * h, "m²", "GYP-01", 24);
+    if (wcWallLen > 0) push("4. Ξηρά Δόμηση", "Χώρισμα WC ανθυγρή (Κ+Α)", wcWallLen * h, "m²", "GYP-03", 28);
 
     // Insulation on ext walls
     if (extWallLen > 0) {
       const openingArea = (q.opening_door.totalM + q.opening_window.totalM + q.opening_sliding.totalM) * 2.20;
       const extWallArea = extWallLen * h - openingArea;
-      if (extWallArea > 0) results.push({ sec: "5. Θερμομόνωση", desc: "ETICS εξωτερική θερμομόνωση", qty: Math.max(0, extWallArea), unit: "m²", price: 42 });
+      if (extWallArea > 0) push("5. Θερμομόνωση", "ETICS εξωτερική θερμομόνωση", Math.max(0, extWallArea), "m²", "MON-01", 42);
     }
 
-    // Openings
+    // Openings (per piece — catalog κουφωμάτων είναι ανά m², οπότε εδώ ενδεικτικές ανά τεμ.)
     const doors = q.opening_door.count;
     const windows = q.opening_window.count;
     const sliding = q.opening_sliding.count;
-    if (doors > 0) results.push({ sec: "13. Ξυλουργικά", desc: "Εσωτερικές πόρτες MDF", qty: doors, unit: "pcs", price: 380 });
-    if (windows > 0) results.push({ sec: "12. Κουφώματα", desc: "Ανοιγόμενα παράθυρα", qty: windows, unit: "pcs", price: 450 });
-    if (sliding > 0) results.push({ sec: "12. Κουφώματα", desc: "Συρόμενα κουφώματα + σίτα", qty: sliding, unit: "pcs", price: 1510 });
+    if (doors > 0) push("13. Ξυλουργικά", "Εσωτερικές πόρτες MDF", doors, "pcs", "KOU-07", 380);
+    if (windows > 0) push("12. Κουφώματα", "Ανοιγόμενα παράθυρα", windows, "pcs", null, 450);
+    if (sliding > 0) push("12. Κουφώματα", "Συρόμενα κουφώματα + σίτα", sliding, "pcs", null, 1510);
 
     // Skirting
     const skirtLen = q.room_internal.totalM + q.room_kitchen.totalM;
-    if (skirtLen > 0) results.push({ sec: "6. Πλακίδια", desc: "Σοβατεπί 7cm", qty: skirtLen, unit: "m", price: 3 });
+    if (skirtLen > 0) push("6. Πλακίδια", "Σοβατεπί", skirtLen, "m", "PLA-06", 3);
 
     // Concrete slab
-    if (totalFootprint > 0) results.push({ sec: "2. Σκυρόδεμα", desc: "Πλάκα Ο/Σ (εμβαδόν κάτοψης)", qty: totalFootprint, unit: "m²", price: 0 });
+    if (totalFootprint > 0) push("2. Σκυρόδεμα", "Πλάκα Ο/Σ (εμβαδόν κάτοψης)", totalFootprint, "m²", null, 0);
 
     // Foundation waterproofing
-    if (totalFootprint > 0) results.push({ sec: "8. Στεγανοποίηση", desc: "Στεγανοποίηση θεμελίωσης", qty: totalFootprint, unit: "m²", price: 18 });
+    if (totalFootprint > 0) push("8. Στεγανοποίηση", "Στεγανοποίηση θεμελίωσης", totalFootprint, "m²", "MON-06", 18);
 
     // Plumbing points
     const wcCount = q.room_wc.count;
     const kitCount = q.room_kitchen.count;
-    if (wcCount > 0) results.push({ sec: "9. Ύδρευση", desc: "Σημεία ύδρευσης WC (≈5 ανά WC)", qty: wcCount * 5, unit: "σημ.", price: 110 });
-    if (kitCount > 0) results.push({ sec: "9. Ύδρευση", desc: "Σημεία ύδρευσης κουζίνα (≈3)", qty: kitCount * 3, unit: "σημ.", price: 110 });
+    if (wcCount > 0) push("9. Ύδρευση", "Σημεία ύδρευσης WC (≈5 ανά WC)", wcCount * 5, "σημ.", "YDR-03", 110);
+    if (kitCount > 0) push("9. Ύδρευση", "Σημεία ύδρευσης κουζίνα (≈3)", kitCount * 3, "σημ.", "YDR-03", 110);
 
     // Electrical
-    if (totalFootprint > 0) results.push({ sec: "10. Ηλεκτρολογικά", desc: "Ηλεκτρολογική εγκατάσταση (κατ' εκτίμηση)", qty: totalFootprint, unit: "m²", price: 95 });
+    if (totalFootprint > 0) push("10. Ηλεκτρολογικά", "Ηλεκτρολογική εγκατάσταση (κατ' εκτίμηση)", totalFootprint, "m²", "ILE-01", 95);
 
     // AC points
     const roomCount = q.room_internal.count;
-    if (roomCount > 0) results.push({ sec: "11. Κλιματισμός", desc: "Σημεία A/C (≈1 ανά χώρο)", qty: roomCount + kitCount, unit: "σημ.", price: 470 });
+    if (roomCount > 0) push("11. Κλιματισμός", "Σημεία A/C (≈1 ανά χώρο)", roomCount + kitCount, "σημ.", null, 470);
 
     return results;
-  }, [quantities, wallHeight]);
+  }, [quantities, wallHeight, catPrices]);
 
   // ── Export JSON ──
   const exportJSON = () => {
