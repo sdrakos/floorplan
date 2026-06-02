@@ -282,117 +282,24 @@ export default function FloorPlanTakeoff() {
     });
   };
 
-  const autoDetect = async () => {
-    if (!image || !calibrated) { setAiStatus("✗ Πρέπει πρώτα calibration"); return; }
-    setDetecting(true);
-    setAiStatus("Προετοιμασία εικόνας...");
-
-    let resized;
-    try {
-      resized = await resizeImage(image, 1024);
-      setAiStatus("Εικόνα: " + resized.w + "×" + resized.h + "px, αποστολή...");
-    } catch (e) {
-      setAiStatus("✗ Resize error: " + e.message);
-      setDetecting(false);
-      return;
-    }
-
-    const scaleFactor = 1 / resized.scale;
-
-    try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 4000,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: resized.data } },
-              { type: "text", text: `Floor plan ${resized.w}x${resized.h}px. Find rooms. Return ONLY a JSON array. No markdown. No explanation.
-[{"name":"Σαλόνι","type":"room_internal","points":[{"x":100,"y":200},{"x":300,"y":200},{"x":300,"y":400},{"x":100,"y":400}]}]
-Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords of this image.` }
-            ]
-          }]
-        })
-      });
-
-      setAiStatus("Ανάλυση απάντησης...");
-      const data = await response.json();
-
-      // Extract text
-      let aiText = "";
-      if (data.content) {
-        for (const block of data.content) {
-          if (block.type === "text") aiText += block.text;
-        }
-      }
-
-      if (!aiText) {
-        setAiStatus("✗ Κενή απάντηση AI. " + (data.error ? data.error.message : ""));
-        setDetecting(false);
-        return;
-      }
-
-      setAiStatus("Εξαγωγή δεδομένων...");
-
-      // Parse rooms from AI text
-      let rooms = null;
-      const clean = aiText.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
-      try { rooms = JSON.parse(clean); } catch {}
-      if (!rooms) { const m = clean.match(/\[[\s\S]*\]/); if (m) try { rooms = JSON.parse(m[0]); } catch {} }
-
-      if (!rooms || !Array.isArray(rooms) || rooms.length === 0) {
-        setAiStatus("✗ Δεν βρέθηκαν rooms. Δοκίμασε χειροκίνητα.");
-        setDetecting(false);
-        return;
-      }
-
-      // Build shapes
-      const newShapes = rooms
-        .filter(r => r?.points?.length >= 3)
-        .map(r => ({
-          id: uid(), type: "polygon",
-          layer: LAYER_TYPES.find(l => l.id === r.type) ? r.type : "room_internal",
-          points: r.points.map(p => ({ x: Math.round(Number(p.x) * scaleFactor), y: Math.round(Number(p.y) * scaleFactor) })),
-          label: r.name || "Χώρος",
-        }));
-
-      if (newShapes.length === 0) {
-        setAiStatus("✗ 0 valid shapes");
-        setDetecting(false);
-        return;
-      }
-
-      pushUndo();
-      setShapes(prev => [...prev, ...newShapes]);
-      setTool("select");
-      setAiStatus("✓ " + newShapes.length + " χώροι! Σύρε κορυφές.");
-
-    } catch (err) {
-      // Last resort: show full error
-      setAiStatus("✗ " + String(err).slice(0, 200));
-    }
-
-    setDetecting(false);
-    setTimeout(() => setAiStatus(""), 12000);
-  };
+  // Claude-vision detection via the backend proxy (no browser CORS, key stays server-side).
+  const autoDetect = () => autoDetectBackend("claude");
 
   // ── Backend Auto-Detect (local back/ API: classical CV or CubiCasa) ──
-  const autoDetectBackend = async () => {
+  const autoDetectBackend = async (engineOverride) => {
+    const eng = (typeof engineOverride === "string" && engineOverride) || engine;
     if (!image) { setAiStatus("✗ Φόρτωσε πρώτα εικόνα"); return; }
     setDetecting(true);
-    setAiStatus("Αποστολή στο backend (" + engine + ")...");
+    setAiStatus("Αποστολή στο backend (" + eng + ")...");
     try {
       const blob = await (await fetch(image)).blob();
       const fd = new FormData();
       fd.append("file", blob, "plan.png");
-      fd.append("engine", engine);
+      fd.append("engine", eng);
       if (calibrated && pixelsPerMeter) fd.append("pixels_per_meter", String(pixelsPerMeter));
 
       const res = await fetch(BACKEND_URL + "/detect", { method: "POST", body: fd });
-      if (!res.ok) { setAiStatus("✗ Backend HTTP " + res.status); setDetecting(false); return; }
+      if (!res.ok) { setAiStatus("✗ Backend HTTP " + res.status + (eng === "claude" ? " (έλεγξε ANTHROPIC_API_KEY)" : "")); setDetecting(false); return; }
       const data = await res.json();
       const rooms = Array.isArray(data.rooms) ? data.rooms : [];
 
@@ -405,11 +312,11 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
           label: r.label || "Χώρος",
         }));
 
-      if (newShapes.length === 0) { setAiStatus("✗ 0 δωμάτια από backend"); setDetecting(false); return; }
+      if (newShapes.length === 0) { setAiStatus("✗ 0 δωμάτια (" + eng + ")"); setDetecting(false); return; }
       pushUndo();
       setShapes(prev => [...prev, ...newShapes]);
       setTool("select");
-      setAiStatus("✓ " + newShapes.length + " δωμάτια (" + engine + "). Διόρθωσε κορυφές/layers.");
+      setAiStatus("✓ " + newShapes.length + " δωμάτια (" + eng + "). Διόρθωσε κορυφές/layers.");
     } catch (err) {
       setAiStatus("✗ Backend error — τρέχει ο server; (" + String(err).slice(0, 90) + ")");
     }
@@ -995,9 +902,9 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
     const doors = q.opening_door.count;
     const windows = q.opening_window.count;
     const sliding = q.opening_sliding.count;
-    if (doors > 0) push("13. Ξυλουργικά", "Εσωτερικές πόρτες MDF", doors, "pcs", "KOU-07", 380);
-    if (windows > 0) push("12. Κουφώματα", "Ανοιγόμενα παράθυρα", windows, "pcs", null, 450);
-    if (sliding > 0) push("12. Κουφώματα", "Συρόμενα κουφώματα + σίτα", sliding, "pcs", null, 1510);
+    if (doors > 0) push("13. Ξυλουργικά", "Εσωτερικές πόρτες MDF", doors, "τεμ", "KOU-07", 380);
+    if (windows > 0) push("12. Κουφώματα", "Ανοιγόμενα παράθυρα", windows, "τεμ", "KOU-10", 450);
+    if (sliding > 0) push("12. Κουφώματα", "Συρόμενα κουφώματα + σίτα", sliding, "τεμ", "KOU-11", 1510);
 
     // Skirting
     const skirtLen = q.room_internal.totalM + q.room_kitchen.totalM;
@@ -1020,7 +927,7 @@ Types: room_internal, room_wc, room_kitchen, balcony, parking. Use pixel coords 
 
     // AC points
     const roomCount = q.room_internal.count;
-    if (roomCount > 0) push("11. Κλιματισμός", "Σημεία A/C (≈1 ανά χώρο)", roomCount + kitCount, "σημ.", null, 470);
+    if (roomCount > 0) push("11. Κλιματισμός", "Σημεία A/C (≈1 ανά χώρο)", roomCount + kitCount, "σημ.", "THE-07", 470);
 
     return results;
   }, [quantities, wallHeight, catPrices]);

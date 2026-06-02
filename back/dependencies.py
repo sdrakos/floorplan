@@ -17,8 +17,16 @@ def _classical() -> RoomDetector:
     return ClassicalDetector()
 
 
+@lru_cache(maxsize=1)
+def _claude() -> RoomDetector:
+    from .detector.claude import ClaudeDetector
+    return ClaudeDetector()
+
+
 def get_detector_for(engine: str | None) -> RoomDetector:
     """Select an engine by name; falls back to the default (CubiCasa)."""
     if engine == "classical":
         return _classical()
+    if engine == "claude":
+        return _claude()
     return get_detector()
